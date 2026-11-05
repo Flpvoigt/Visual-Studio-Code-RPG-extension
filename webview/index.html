@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src {{cspSource}} 'unsafe-inline'; script-src 'nonce-{{nonce}}'; font-src {{cspSource}}; img-src {{cspSource}};" />
+  <link rel="stylesheet" href="{{styleUri}}" />
+  <title>Code Gremlin</title>
+</head>
+<body>
+  <div class="wrap">
+    <div class="tabs">
+      <button class="tab active" data-tab="hero">Herói</button>
+      <button class="tab" data-tab="ranks">Patentes</button>
+      <button class="tab" data-tab="shop">Loja</button>
+    </div>
+
+    <div class="tabpanel" id="tab-hero">
+      <div class="title-banner" id="titleBanner">Carregando...</div>
+
+      <div class="portrait-card" id="portraitCard">
+        <div class="combo-float" id="comboFloat"></div>
+        <div class="twinkles" id="twinkles"></div>
+        <div class="portrait-frame" id="portraitFrame">
+          <div class="portrait" id="portrait"></div>
+        </div>
+        <div class="level-pill" id="levelPill">LEVEL 1</div>
+      </div>
+      <div class="mood-label" id="moodLabel">carregando...</div>
+
+      <div class="xp-row">
+        <div class="xp-level" id="levelLabel">Nv. 1</div>
+        <div class="xp-bar-track"><div class="xp-bar-fill" id="xpFill" style="width:0%"></div></div>
+      </div>
+      <div class="xp-text" id="xpText">0 / 50 XP</div>
+      <div class="streak-hint" id="streakHint">streak: 0</div>
+
+      <div class="stats-grid">
+        <div class="stat"><div class="val" id="statSaves">0</div><div class="lbl">Saves</div></div>
+        <div class="stat"><div class="val" id="statFixed">0</div><div class="lbl">Corrigidos</div></div>
+        <div class="stat"><div class="val" id="statCoffee">0</div><div class="lbl">Cafés</div></div>
+        <div class="stat coin"><div class="val" id="statCoins">0</div><div class="lbl">Moedas</div></div>
+      </div>
+
+      <h3>Conquistas</h3>
+      <div class="achievements" id="achievements"></div>
+
+      <div class="quip" id="quip"></div>
+    </div>
+
+    <div class="tabpanel hidden" id="tab-ranks">
+      <h3>Trilha de Patentes</h3>
+      <div class="rank-grid" id="rankGrid"></div>
+    </div>
+
+    <div class="tabpanel hidden" id="tab-shop">
+      <div class="shop-header">
+        <span>Suas moedas:</span>
+        <strong id="shopCoins">0</strong> 🪙
+      </div>
+      <div class="shop-list" id="shopList"></div>
+    </div>
+  </div>
+
+  <div class="stage" id="sparkStage"><div class="sparks" id="sparks"></div></div>
+
+  <script nonce="{{nonce}}">
+    const vscode = acquireVsCodeApi();
+    // Tiers that have real generated art (webview/badges/tierN.png); any tier missing here
+    // falls back to the drawn SVG seal below (currently just tier 6).
+    const BADGE_URIS = {{badgeUris}};
+    const titleBanner = document.getElementById('titleBanner');
+    const portraitCard = document.getElementById('portraitCard');
+    const portraitFrame = document.getElementById('portraitFrame');
+    const portrait = document.getElementById('portrait');
+    const twinklesEl = document.getElementById('twinkles');
+    const moodLabel = document.getElementById('moodLabel');
+    const levelLabel = document.getElementById('levelLabel');
+    const levelPill = document.getElementById('levelPill');
+    const streakHint = document.getElementById('streakHint');
+    const comboFloat = document.getElementById('comboFloat');
+    const xpFill = document.getElementById('xpFill');
+    const xpText = document.getElementById('xpText');
+    const achEl = document.getElementById('achievements');
+    const quipEl = document.getElementById('quip');
+    const sparksEl = document.getElementById('sparks');
+    const shopList = document.getElementById('shopList');
+    const shopCoins = document.getElementById('shopCoins');
+    const rankGrid = document.getElementById('rankGrid');
+
+    document.querySelectorAll('.tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.tabpanel').forEach((p) => p.classList.add('hidden'));
+        document.getElementById('tab-' + btn.dataset.tab).classList.remove('hidden');
+      });
+    });
+
+    const MOOD_LABEL = {
+      happy: 'Feliz', worried: 'Preocupado', angry: 'Puto', dying: 'Agonizando', asleep: 'Dormindo'
+    };
+
+    // ---- Badge/seal generator -------------------------------------------------
+    // Matches the reference: scalloped seal medallion, metallic radial gradient,
+    // recessed bezel ring, centered icon, "LEVEL N" pill overlapping the bottom tip.
+    const TIER_METAL = {
+      1: { hi: '#c9a97a', mid: '#8a6a46', lo: '#3c2c18', ring: '#6b5338' },
+      2: { hi: '#ffcf9e', mid: '#e0975a', lo: '#5c3814', ring: '#c9834a' },
+      3: { hi: '#ffffff', mid: '#dfe6ee', lo: '#788190', ring: '#c7cdd6' },
+      4: { hi: '#aebcff', mid: '#5a6cc9', lo: '#141834', ring: '#6a7ad6' },
+      5: { hi: '#bdf5ff', mid: '#39a7bb', lo: '#0a2024', ring: '#6fe0f0' },
+      6: { hi: '#fff2b0', mid: '#d4a92a', lo: '#2c2008', ring: '#ffd700' },
+      7: { hi: '#e9c8ff', mid: '#9a4ec9', lo: '#1a0824', ring: '#bd93f9' },
+      8: { hi: '#fff6d8', mid: '#ffb347', lo: '#2a1230', ring: '#ff79c6' },
+    };
+    const ICON_PATHS = {
+      gear: '<path d="M12 8a4 4 0 100 8 4 4 0 000-8zm9.4 4a7.4 7.4 0 01-.1 1.2l2.1 1.6-2 3.5-2.5-1a7.6 7.6 0 01-2.1 1.2l-.4 2.6h-4l-.4-2.6a7.6 7.6 0 01-2.1-1.2l-2.5 1-2-3.5 2.1-1.6A7.4 7.4 0 012.6 12c0-.4 0-.8.1-1.2L.6 9.2l2-3.5 2.5 1a7.6 7.6 0 012.1-1.2L7.6 2.9h4l.4 2.6a7.6 7.6 0 012.1 1.2l2.5-1 2 3.5-2.1 1.6c.1.4.1.8.1 1.2z"/>',
+      loop: '<path d="M17.65 6.35A7.95 7.95 0 0012 4a8 8 0 108 8h-2a6 6 0 11-1.76-4.24L13 11h7V4l-2.35 2.35z"/>',
+      shield: '<path d="M12 1.5l8 3v6c0 5.5-3.4 10.3-8 11.5-4.6-1.2-8-6-8-11.5v-6l8-3z"/>',
+      diamond: '<path d="M6 3h12l4 6-10 12L2 9z"/>',
+      crown: '<path d="M2 18h20l-2-9-5 4-3-7-3 7-5-4-2 9z"/><rect x="3" y="18.5" width="18" height="2" rx="0.5"/>',
+      gem: '<path d="M12 2l4 4h4l2 5-10 11L2 11l2-5h4z"/>',
+      dragon: '<path d="M4 14c2-4 6-6 10-5-1-2-3-3-5-3 4-1 8 1 9 5 1-1 2-1 2 0-1 3-4 5-7 5l1 3-3-1-1-3c-2 1-4 0-6-1z"/>',
+    };
+    const TIER_ICON = { 1: 'gear', 2: 'gear', 3: 'loop', 4: 'shield', 5: 'diamond', 6: 'crown', 7: 'gem', 8: 'phoenix' };
+
+    function sealPoints(cx, cy, rOuter, rInner, bumps) {
+      const pts = [];
+      const step = Math.PI / bumps;
+      for (let i = 0; i < bumps * 2; i++) {
+        const r = i % 2 === 0 ? rOuter : rInner;
+        const a = i * step - Math.PI / 2;
+        pts.push((cx + r * Math.cos(a)).toFixed(1) + ',' + (cy + r * Math.sin(a)).toFixed(1));
+      }
+      return pts.join(' ');
+    }
+
+    // Phoenix body + two independently-animatable wings (only used at tier 8 / dragon skin).
+    function phoenixMarkup(animated) {
+      const wingL = 'M11 10 2 6 6 11 M11 11 1 12 6 14 M11 12 3 18 7 16';
+      const wingR = 'M13 10 22 6 18 11 M13 11 23 12 18 14 M13 12 21 18 17 16';
+      const cls = animated ? ' class="wing-l"' : '';
+      const clsR = animated ? ' class="wing-r"' : '';
+      return `
+        <path${cls} d="${wingL}Z" fill-rule="evenodd"/>
+        <path${clsR} d="${wingR}Z" fill-rule="evenodd"/>
+        <path d="M12 5c1.6 3 1.6 12 0 15c-1.6-3-1.6-12 0-15z"/>
+        <path d="M9 4l3-2 3 2-3 1.4z"/>
+      `;
+    }
+
+    // effectTier (1-8) drives the placeholder seal's metal/icon/glow — it's the "how fancy"
+    // bucket shared by every rank that doesn't have real generated art yet.
+    function badgeSvg(effectTier, opts) {
+      opts = opts || {};
+      const size = opts.size || 110;
+      const animated = !!opts.animated;
+      const isDragon = !!opts.dragon;
+      const m = TIER_METAL[effectTier] || TIER_METAL[1];
+      const gid = 'grad' + Math.random().toString(36).slice(2, 9);
+      const c = size / 2;
+      const outerR = c - 3;
+      const innerR = outerR * 0.84;
+      const bezelR = outerR * 0.6;
+      const pts = sealPoints(c, c, outerR, innerR, 12);
+      const iconKey = isDragon ? 'phoenix' : (TIER_ICON[effectTier] || 'gear');
+      const iconBox = bezelR * 1.05;
+      const iconOffset = c - iconBox / 2;
+      const iconInner = iconKey === 'phoenix'
+        ? phoenixMarkup(animated && effectTier >= 8)
+        : ICON_PATHS[iconKey];
+
+      return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" class="badge-svg tier${effectTier}${animated ? ' animated' : ''}">
+        <defs>
+          <radialGradient id="${gid}" cx="35%" cy="28%" r="78%">
+            <stop offset="0%" stop-color="${m.hi}"/>
+            <stop offset="55%" stop-color="${m.mid}"/>
+            <stop offset="100%" stop-color="${m.lo}"/>
+          </radialGradient>
+        </defs>
+        <polygon points="${pts}" fill="url(#${gid})" stroke="${m.ring}" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="${c}" cy="${c}" r="${bezelR}" fill="${m.lo}" opacity="0.5"/>
+        <circle cx="${c}" cy="${c}" r="${bezelR - 2.5}" fill="none" stroke="${m.hi}" stroke-width="1" opacity="0.45"/>
+        <g transform="translate(${iconOffset.toFixed(1)},${iconOffset.toFixed(1)}) scale(${(iconBox / 24).toFixed(2)})" fill="${m.hi}">
+          ${iconInner}
+        </g>
+      </svg>`;
+    }
+
+    // Real art if we have it for this exact rank (unless the dragon-skin perk is active, which
+    // has no generated image yet and always uses the drawn SVG dragon). Otherwise falls back to
+    // the generic seal, styled by effectTier.
+    function badgeMarkup(tier, effectTier, opts) {
+      opts = opts || {};
+      const size = opts.size || 100;
+      if (!opts.dragon && BADGE_URIS[tier]) {
+        return `<img class="badge-img tier${effectTier}" src="${BADGE_URIS[tier]}" width="${size}" height="${size}" alt="patente"/>`;
+      }
+      return badgeSvg(effectTier, opts);
+    }
+
+    function renderBadgeInto(el, tier, effectTier, animated, dragon) {
+      el.innerHTML = badgeMarkup(tier, effectTier, { size: 100, animated, dragon });
+    }
+
+    function renderTwinkles(effectTier) {
+      twinklesEl.innerHTML = '';
+      twinklesEl.className = 'twinkles';
+      if (effectTier < 6) return;
+      const count = effectTier >= 8 ? 8 : effectTier === 7 ? 5 : 3;
+      for (let i = 0; i < count; i++) {
+        const t = document.createElement('div');
+        t.className = 'twinkle';
+        t.style.left = (10 + Math.random() * 80) + '%';
+        t.style.top = (10 + Math.random() * 80) + '%';
+        t.style.animationDelay = (Math.random() * 2.5) + 's';
+        t.style.animationDuration = (1.4 + Math.random() * 1.6) + 's';
+        twinklesEl.appendChild(t);
+      }
+    }
+    // ----------------------------------------------------------------------------
+
+    function burst(color) {
+      sparksEl.innerHTML = '';
+      sparksEl.classList.remove('burst');
+      for (let i = 0; i < 16; i++) {
+        const s = document.createElement('div');
+        s.className = 'spark';
+        const angle = (Math.PI * 2 * i) / 16;
+        const dist = 70 + Math.random() * 40;
+        s.style.setProperty('--dxdy', `translate(${Math.cos(angle) * dist}px, ${Math.sin(angle) * dist}px)`);
+        s.style.background = color;
+        sparksEl.appendChild(s);
+      }
+      requestAnimationFrame(() => sparksEl.classList.add('burst'));
+    }
+
+    function renderShop(items) {
+      shopList.innerHTML = '';
+      for (const item of items) {
+        const row = document.createElement('div');
+        row.className = 'shop-item' + (item.owned ? ' owned' : '');
+        row.innerHTML = `
+          <div class="shop-icon">${item.icon}</div>
+          <div class="shop-info">
+            <div class="shop-name">${item.text}</div>
+            <div class="shop-desc">${item.desc}</div>
+          </div>
+          <button class="shop-buy" ${item.owned ? 'disabled' : ''} data-id="${item.id}">
+            ${item.owned ? 'Adquirido' : item.cost + ' 🪙'}
+          </button>
+        `;
+        shopList.appendChild(row);
+      }
+      shopList.querySelectorAll('.shop-buy:not([disabled])').forEach((btn) => {
+        btn.addEventListener('click', () => vscode.postMessage({ type: 'buy', id: btn.dataset.id }));
+      });
+    }
+
+    function renderRanks(titles) {
+      rankGrid.innerHTML = '';
+      for (const t of titles || []) {
+        const card = document.createElement('div');
+        card.className = 'rank-card' + (t.unlocked ? ' unlocked' : '') + (t.current ? ' current' : '');
+        const badge = document.createElement('div');
+        badge.className = 'rank-badge';
+        badge.innerHTML = badgeMarkup(t.tier, t.effectTier, { size: 72, animated: false });
+        card.appendChild(badge);
+        const pill = document.createElement('div');
+        pill.className = 'rank-level-pill';
+        pill.textContent = 'LEVEL ' + t.level;
+        card.appendChild(pill);
+        const name = document.createElement('div');
+        name.className = 'rank-name';
+        name.textContent = t.text.toUpperCase();
+        card.appendChild(name);
+        if (!t.unlocked) {
+          const lock = document.createElement('div');
+          lock.className = 'rank-lock-overlay';
+          lock.textContent = '🔒';
+          card.appendChild(lock);
+        }
+        rankGrid.appendChild(card);
+      }
+    }
+
+    function showComboFloat(count, xp) {
+      comboFloat.textContent = `🔥 COMBO x${count}  +${xp} XP`;
+      comboFloat.classList.remove('fire');
+      void comboFloat.offsetWidth; // restart animation
+      comboFloat.classList.add('fire');
+    }
+
+    let lastEffectTier = null;
+
+    function render(state) {
+      portraitCard.className = 'portrait-card ' + state.mood + (state.goldFrame ? ' gold-frame' : '') + ' tier' + state.effectTier;
+      renderBadgeInto(portrait, state.tier, state.effectTier, true, state.dragonSkin);
+      if (state.effectTier !== lastEffectTier) {
+        renderTwinkles(state.effectTier);
+        lastEffectTier = state.effectTier;
+      }
+      moodLabel.textContent = MOOD_LABEL[state.mood] || state.mood;
+
+      titleBanner.className = 'title-banner tier' + state.effectTier;
+      titleBanner.textContent = state.title || '';
+
+      levelLabel.textContent = 'Nv. ' + state.level;
+      levelPill.textContent = 'LEVEL ' + state.level;
+
+      const pct = Math.min(100, (state.xpIntoLevel / state.xpForNextLevel) * 100);
+      xpFill.style.width = pct + '%';
+      xpText.textContent = `${state.xpIntoLevel} / ${state.xpForNextLevel} XP`;
+
+      const streak = state.cleanStreak || 0;
+      const toNext = 3 - (streak % 3 === 0 ? 0 : streak % 3);
+      streakHint.innerHTML = streak > 0
+        ? `streak: <span class="on">${streak}</span> · combo em ${streak % 3 === 0 ? 3 : toNext} save(s)`
+        : 'streak: 0 (salva sem erro 3x seguidas pra combo)';
+
+      document.getElementById('statSaves').textContent = state.saveCount;
+      document.getElementById('statFixed').textContent = state.errorsFixedToday;
+      document.getElementById('statCoffee').textContent = state.coffees;
+      document.getElementById('statCoins').textContent = state.coins;
+      shopCoins.textContent = state.coins;
+
+      achEl.innerHTML = '';
+      for (const a of state.achievements) {
+        const b = document.createElement('div');
+        b.className = 'badge' + (a.unlocked ? ' unlocked' : '');
+        b.innerHTML = `${a.icon}<span class="tip">${a.unlocked ? a.text : '???'}</span>`;
+        achEl.appendChild(b);
+      }
+
+      renderShop(state.shop || []);
+      renderRanks(state.titles || []);
+
+      if (state.event === 'fail') burst('#ff5555');
+      if (state.event === 'win') burst('#50fa7b');
+      if (state.event === 'achievement') burst('#f1fa8c');
+      if (state.event === 'combo') {
+        burst('#ffd700');
+        showComboFloat(state.comboCount, state.comboXp);
+      }
+
+      if (state.quip) quipEl.textContent = '"' + state.quip + '"';
+    }
+
+    window.addEventListener('message', (e) => render(e.data));
+    vscode.postMessage({ type: 'ready' });
+  </script>
+</body>
+</html>

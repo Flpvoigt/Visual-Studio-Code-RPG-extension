@@ -1,0 +1,59 @@
+{
+  "name": "code-gremlin",
+  "displayName": "Code Gremlin",
+  "description": "A chaotic little creature that lives in your status bar, reacts to your errors, roasts your code, celebrates when you fix it, and tracks your suffering.",
+  "version": "0.0.1",
+  "publisher": "Flpvoigt",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codeGremlin.openPanel",
+        "title": "Code Gremlin: Abrir Painel"
+      },
+      {
+        "command": "codeGremlin.showReport",
+        "title": "Code Gremlin: Relatório do Dia"
+      },
+      {
+        "command": "codeGremlin.feedGremlin",
+        "title": "Code Gremlin: Cutucar o Bicho"
+      }
+    ],
+    "configuration": {
+      "title": "Code Gremlin",
+      "properties": {
+        "codeGremlin.soundEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Tocar efeitos sonoros (beeps) em erros e vitórias."
+        },
+        "codeGremlin.roastEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Mostrar comentários sarcásticos aleatórios ao salvar com erro."
+        },
+        "codeGremlin.idleMinutes": {
+          "type": "number",
+          "default": 5,
+          "description": "Minutos sem atividade até o bicho \"dormir\"."
+        }
+      }
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Flpvoigt/code-gremlin"
+  },
+  "license": "MIT"
+}
